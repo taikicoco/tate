@@ -165,8 +165,8 @@ func (e *DeltaEncoder) WriteTo(w io.Writer, base int64, deltas []int64) error {
 	return nil
 }
 
-// ReadFrom reads delta-encoded data from a reader.
-func (e *DeltaEncoder) ReadFrom(r io.Reader) (base int64, deltas []int64, err error) {
+// ReadData reads delta-encoded data from a reader.
+func (e *DeltaEncoder) ReadData(r io.Reader) (base int64, deltas []int64, err error) {
 	// Read base
 	if err := binary.Read(r, binary.LittleEndian, &base); err != nil {
 		return 0, nil, err

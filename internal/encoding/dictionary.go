@@ -135,8 +135,8 @@ func (e *DictionaryEncoder) WriteTo(w io.Writer, indices []int) error {
 	return nil
 }
 
-// ReadFrom reads the dictionary and encoded data from a reader.
-func (e *DictionaryEncoder) ReadFrom(r io.Reader) ([]int, error) {
+// ReadData reads the dictionary and encoded data from a reader.
+func (e *DictionaryEncoder) ReadData(r io.Reader) ([]int, error) {
 	// Read dictionary size
 	var dictSize uint32
 	if err := binary.Read(r, binary.LittleEndian, &dictSize); err != nil {

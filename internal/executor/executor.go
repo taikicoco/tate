@@ -63,7 +63,7 @@ func (e *Executor) executeCreateTable(stmt *ast.CreateTableStatement) (*Result, 
 	// Create table storage
 	table, err := storage.CreateTable(e.dataDir, schema)
 	if err != nil {
-		e.catalog.DropTable(stmt.TableName)
+		_ = e.catalog.DropTable(stmt.TableName)
 		return nil, err
 	}
 

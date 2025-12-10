@@ -154,14 +154,14 @@ func TestBitmapSerialization(t *testing.T) {
 
 	// Write to buffer
 	var buf bytes.Buffer
-	if err := bm.WriteTo(&buf); err != nil {
-		t.Fatalf("WriteTo failed: %v", err)
+	if err := bm.WriteData(&buf); err != nil {
+		t.Fatalf("WriteData failed: %v", err)
 	}
 
 	// Read back
 	bm2 := NewBitmap()
-	if err := bm2.ReadFrom(&buf); err != nil {
-		t.Fatalf("ReadFrom failed: %v", err)
+	if err := bm2.ReadData(&buf); err != nil {
+		t.Fatalf("ReadData failed: %v", err)
 	}
 
 	// Verify

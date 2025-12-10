@@ -200,10 +200,7 @@ func (p *Parser) parseGroupByClause() []string {
 
 	p.nextToken() // move past BY
 
-	for {
-		if !p.curTokenIs(lexer.TOKEN_IDENT) {
-			break
-		}
+	for p.curTokenIs(lexer.TOKEN_IDENT) {
 		columns = append(columns, p.curToken.Literal)
 
 		if !p.peekTokenIs(lexer.TOKEN_COMMA) {

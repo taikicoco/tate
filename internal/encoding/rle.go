@@ -96,8 +96,8 @@ func (e *RLEEncoder) WriteTo(w io.Writer, runs []Run) error {
 	return nil
 }
 
-// ReadFrom reads encoded data from a reader.
-func (e *RLEEncoder) ReadFrom(r io.Reader) ([]Run, error) {
+// ReadData reads encoded data from a reader.
+func (e *RLEEncoder) ReadData(r io.Reader) ([]Run, error) {
 	var runCount uint32
 	if err := binary.Read(r, binary.LittleEndian, &runCount); err != nil {
 		return nil, err

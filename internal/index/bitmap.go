@@ -189,8 +189,8 @@ func (b *Bitmap) Length() int {
 	return b.length
 }
 
-// WriteTo writes the bitmap to a writer.
-func (b *Bitmap) WriteTo(w io.Writer) error {
+// WriteData writes the bitmap to a writer.
+func (b *Bitmap) WriteData(w io.Writer) error {
 	// Write length
 	if err := binary.Write(w, binary.LittleEndian, uint64(b.length)); err != nil {
 		return err
@@ -211,8 +211,8 @@ func (b *Bitmap) WriteTo(w io.Writer) error {
 	return nil
 }
 
-// ReadFrom reads the bitmap from a reader.
-func (b *Bitmap) ReadFrom(r io.Reader) error {
+// ReadData reads the bitmap from a reader.
+func (b *Bitmap) ReadData(r io.Reader) error {
 	// Read length
 	var length uint64
 	if err := binary.Read(r, binary.LittleEndian, &length); err != nil {

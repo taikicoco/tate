@@ -50,7 +50,7 @@ func TestGetTable(t *testing.T) {
 	schema.AddColumn("id", types.TypeInt64, false)
 	schema.AddColumn("price", types.TypeFloat64, true)
 
-	cat.RegisterTable(schema)
+	_ = cat.RegisterTable(schema)
 
 	got, exists := cat.GetTable("products")
 	if !exists {
@@ -78,7 +78,7 @@ func TestDropTable(t *testing.T) {
 
 	schema := NewTableSchema("temp")
 	schema.AddColumn("id", types.TypeInt64, false)
-	cat.RegisterTable(schema)
+	_ = cat.RegisterTable(schema)
 
 	if err := cat.DropTable("temp"); err != nil {
 		t.Fatalf("DropTable failed: %v", err)
@@ -100,11 +100,11 @@ func TestListTables(t *testing.T) {
 
 	schema1 := NewTableSchema("table1")
 	schema1.AddColumn("id", types.TypeInt64, false)
-	cat.RegisterTable(schema1)
+	_ = cat.RegisterTable(schema1)
 
 	schema2 := NewTableSchema("table2")
 	schema2.AddColumn("id", types.TypeInt64, false)
-	cat.RegisterTable(schema2)
+	_ = cat.RegisterTable(schema2)
 
 	tables := cat.ListTables()
 	if len(tables) != 2 {
@@ -120,7 +120,7 @@ func TestCatalogPersistence(t *testing.T) {
 	schema := NewTableSchema("persistent")
 	schema.AddColumn("id", types.TypeInt64, false)
 	schema.AddColumn("value", types.TypeString, true)
-	cat1.RegisterTable(schema)
+	_ = cat1.RegisterTable(schema)
 
 	// Create new catalog instance (should load from disk)
 	cat2, err := NewCatalog(tmpDir)
@@ -199,7 +199,7 @@ func TestCatalogConcurrency(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			schema := NewTableSchema("concurrent_" + string(rune('a'+i%26)))
 			schema.AddColumn("id", types.TypeInt64, false)
-			cat.RegisterTable(schema)
+			_ = cat.RegisterTable(schema)
 		}
 		done <- true
 	}()

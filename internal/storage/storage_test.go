@@ -372,13 +372,13 @@ func TestTableScan(t *testing.T) {
 
 	// Insert 10 rows
 	for i := int64(0); i < 10; i++ {
-		table.Insert([]types.Value{types.NewInt64Value(i * 10)})
+		_ = table.Insert([]types.Value{types.NewInt64Value(i * 10)})
 	}
 
 	// Scan all rows
 	sum := int64(0)
 	count := 0
-	table.Scan(func(rowIndex uint64, row []types.Value) bool {
+	_ = table.Scan(func(rowIndex uint64, row []types.Value) bool {
 		val, _ := row[0].AsInt64()
 		sum += val
 		count++
@@ -396,7 +396,7 @@ func TestTableScan(t *testing.T) {
 
 	// Scan with early termination
 	earlyCount := 0
-	table.Scan(func(rowIndex uint64, row []types.Value) bool {
+	_ = table.Scan(func(rowIndex uint64, row []types.Value) bool {
 		earlyCount++
 		return earlyCount < 5 // Stop after 5 rows
 	})
@@ -416,12 +416,12 @@ func TestTableScanColumns(t *testing.T) {
 
 	table, _ := CreateTable(tmpDir, schema)
 
-	table.Insert([]types.Value{
+	_ = table.Insert([]types.Value{
 		types.NewInt64Value(1),
 		types.NewStringValue("one"),
 		types.NewFloat64Value(1.0),
 	})
-	table.Insert([]types.Value{
+	_ = table.Insert([]types.Value{
 		types.NewInt64Value(2),
 		types.NewStringValue("two"),
 		types.NewFloat64Value(2.0),
@@ -429,7 +429,7 @@ func TestTableScanColumns(t *testing.T) {
 
 	// Scan only columns a and c
 	count := 0
-	table.ScanColumns([]string{"a", "c"}, func(rowIndex uint64, values []types.Value) bool {
+	_ = table.ScanColumns([]string{"a", "c"}, func(rowIndex uint64, values []types.Value) bool {
 		if len(values) != 2 {
 			t.Errorf("expected 2 values, got %d", len(values))
 		}
@@ -449,8 +449,8 @@ func TestTableDrop(t *testing.T) {
 	schema.AddColumn("id", types.TypeInt64, false)
 
 	table, _ := CreateTable(tmpDir, schema)
-	table.Insert([]types.Value{types.NewInt64Value(1)})
-	table.Save()
+	_ = table.Insert([]types.Value{types.NewInt64Value(1)})
+	_ = table.Save()
 
 	if err := table.Drop(); err != nil {
 		t.Fatalf("Drop failed: %v", err)

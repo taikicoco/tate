@@ -84,7 +84,7 @@ func TestRLESerialization(t *testing.T) {
 
 	// Read back
 	encoder2 := NewRLEEncoder()
-	runs2, err := encoder2.ReadFrom(&buf)
+	runs2, err := encoder2.ReadData(&buf)
 	if err != nil {
 		t.Fatalf("ReadFrom failed: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestDictionaryRoundTrip(t *testing.T) {
 
 	// Read back
 	encoder2 := NewDictionaryEncoder()
-	indices2, err := encoder2.ReadFrom(&buf)
+	indices2, err := encoder2.ReadData(&buf)
 	if err != nil {
 		t.Fatalf("ReadFrom failed: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestDeltaSerialization(t *testing.T) {
 
 	// Read back
 	encoder2 := NewDeltaEncoder()
-	base2, deltas2, err := encoder2.ReadFrom(&buf)
+	base2, deltas2, err := encoder2.ReadData(&buf)
 	if err != nil {
 		t.Fatalf("ReadFrom failed: %v", err)
 	}

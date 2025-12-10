@@ -319,7 +319,7 @@ func (cf *ColumnFile) Save() error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Update header sizes
 	cf.Header.NullBitmapSize = uint64(len(cf.NullMask))
@@ -349,7 +349,7 @@ func LoadColumnFile(path string) (*ColumnFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	cf := &ColumnFile{path: path}
 
