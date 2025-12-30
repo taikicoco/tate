@@ -1,3 +1,3 @@
 module github.com/taikicoco/tate
 
-go 1.25
+go 1.24
