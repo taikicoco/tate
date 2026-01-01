@@ -1,10 +1,7 @@
 // Package storage implements the storage layer of the database.
 package storage
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 // DataType represents the type of a column value.
 type DataType uint8
@@ -15,7 +12,6 @@ const (
 	TypeInt64
 	TypeFloat64
 	TypeString
-	TypeTimestamp
 )
 
 // String returns the string representation of the data type.
@@ -31,8 +27,6 @@ func (t DataType) String() string {
 		return "FLOAT64"
 	case TypeString:
 		return "STRING"
-	case TypeTimestamp:
-		return "TIMESTAMP"
 	default:
 		return "UNKNOWN"
 	}
@@ -49,8 +43,6 @@ func ParseDataType(s string) DataType {
 		return TypeString
 	case "BOOL", "BOOLEAN":
 		return TypeBool
-	case "TIMESTAMP", "DATETIME":
-		return TypeTimestamp
 	default:
 		return TypeNull
 	}
@@ -88,11 +80,6 @@ func NewStringValue(v string) Value {
 	return Value{Type: TypeString, data: v}
 }
 
-// NewTimestampValue creates a timestamp value.
-func NewTimestampValue(v time.Time) Value {
-	return Value{Type: TypeTimestamp, data: v}
-}
-
 // AsBool returns the value as a bool.
 func (v Value) AsBool() (bool, bool) {
 	if v.Type != TypeBool || v.IsNull {
@@ -125,14 +112,6 @@ func (v Value) AsString() (string, bool) {
 	return v.data.(string), true
 }
 
-// AsTimestamp returns the value as a time.Time.
-func (v Value) AsTimestamp() (time.Time, bool) {
-	if v.Type != TypeTimestamp || v.IsNull {
-		return time.Time{}, false
-	}
-	return v.data.(time.Time), true
-}
-
 // String returns the string representation of the value.
 func (v Value) String() string {
 	if v.IsNull {
@@ -147,98 +126,7 @@ func (v Value) String() string {
 		return fmt.Sprintf("%.6f", v.data.(float64))
 	case TypeString:
 		return v.data.(string)
-	case TypeTimestamp:
-		return v.data.(time.Time).Format(time.RFC3339)
 	default:
 		return "UNKNOWN"
-	}
-}
-
-// Compare compares two values.
-// Returns -1 if v < other, 0 if v == other, 1 if v > other.
-func (v Value) Compare(other Value) int {
-	if v.IsNull && other.IsNull {
-		return 0
-	}
-	if v.IsNull {
-		return -1
-	}
-	if other.IsNull {
-		return 1
-	}
-	if v.Type != other.Type {
-		return 0
-	}
-
-	switch v.Type {
-	case TypeBool:
-		a, _ := v.AsBool()
-		b, _ := other.AsBool()
-		if a == b {
-			return 0
-		}
-		if !a && b {
-			return -1
-		}
-		return 1
-	case TypeInt64:
-		a, _ := v.AsInt64()
-		b, _ := other.AsInt64()
-		if a < b {
-			return -1
-		}
-		if a > b {
-			return 1
-		}
-		return 0
-	case TypeFloat64:
-		a, _ := v.AsFloat64()
-		b, _ := other.AsFloat64()
-		if a < b {
-			return -1
-		}
-		if a > b {
-			return 1
-		}
-		return 0
-	case TypeString:
-		a, _ := v.AsString()
-		b, _ := other.AsString()
-		if a < b {
-			return -1
-		}
-		if a > b {
-			return 1
-		}
-		return 0
-	case TypeTimestamp:
-		a, _ := v.AsTimestamp()
-		b, _ := other.AsTimestamp()
-		if a.Before(b) {
-			return -1
-		}
-		if a.After(b) {
-			return 1
-		}
-		return 0
-	default:
-		return 0
-	}
-}
-
-// ToNumeric converts the value to a float64 for numeric operations.
-func (v Value) ToNumeric() (float64, bool) {
-	if v.IsNull {
-		return 0, false
-	}
-	switch v.Type {
-	case TypeInt64:
-		val, _ := v.AsInt64()
-		return float64(val), true
-	case TypeFloat64:
-		val, _ := v.AsFloat64()
-		return val, true
-	default:
-		return 0, false
 	}
 }

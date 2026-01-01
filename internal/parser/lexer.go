@@ -20,16 +20,7 @@ const (
 	TOKEN_STRING
 
 	// Operators
-	TOKEN_EQ       // =
-	TOKEN_NEQ      // != or <>
-	TOKEN_LT       // <
-	TOKEN_GT       // >
-	TOKEN_LTE      // <=
-	TOKEN_GTE      // >=
-	TOKEN_PLUS     // +
-	TOKEN_MINUS    // -
 	TOKEN_ASTERISK // *
-	TOKEN_SLASH    // /
 
 	// Delimiters
 	TOKEN_COMMA     // ,
@@ -40,41 +31,21 @@ const (
 	// Keywords
 	TOKEN_SELECT
 	TOKEN_FROM
-	TOKEN_WHERE
 	TOKEN_INSERT
 	TOKEN_INTO
 	TOKEN_VALUES
 	TOKEN_CREATE
 	TOKEN_TABLE
 	TOKEN_DROP
-	TOKEN_ORDER
-	TOKEN_BY
-	TOKEN_ASC
-	TOKEN_DESC
-	TOKEN_LIMIT
-	TOKEN_OFFSET
-	TOKEN_AND
-	TOKEN_OR
-	TOKEN_NOT
 	TOKEN_NULL
 	TOKEN_TRUE
 	TOKEN_FALSE
-	TOKEN_AS
-	TOKEN_DISTINCT
-
-	// Aggregate functions
-	TOKEN_COUNT
-	TOKEN_SUM
-	TOKEN_AVG
-	TOKEN_MIN
-	TOKEN_MAX
 
 	// Data types
 	TOKEN_TYPE_INT64
 	TOKEN_TYPE_FLOAT64
 	TOKEN_TYPE_STRING
 	TOKEN_TYPE_BOOL
-	TOKEN_TYPE_TIMESTAMP
 )
 
 // Token represents a lexical token.
@@ -86,39 +57,21 @@ type Token struct {
 }
 
 var keywords = map[string]TokenType{
-	"SELECT":    TOKEN_SELECT,
-	"FROM":      TOKEN_FROM,
-	"WHERE":     TOKEN_WHERE,
-	"INSERT":    TOKEN_INSERT,
-	"INTO":      TOKEN_INTO,
-	"VALUES":    TOKEN_VALUES,
-	"CREATE":    TOKEN_CREATE,
-	"TABLE":     TOKEN_TABLE,
-	"DROP":      TOKEN_DROP,
-	"ORDER":     TOKEN_ORDER,
-	"BY":        TOKEN_BY,
-	"ASC":       TOKEN_ASC,
-	"DESC":      TOKEN_DESC,
-	"LIMIT":     TOKEN_LIMIT,
-	"OFFSET":    TOKEN_OFFSET,
-	"AND":       TOKEN_AND,
-	"OR":        TOKEN_OR,
-	"NOT":       TOKEN_NOT,
-	"NULL":      TOKEN_NULL,
-	"TRUE":      TOKEN_TRUE,
-	"FALSE":     TOKEN_FALSE,
-	"AS":        TOKEN_AS,
-	"DISTINCT":  TOKEN_DISTINCT,
-	"COUNT":     TOKEN_COUNT,
-	"SUM":       TOKEN_SUM,
-	"AVG":       TOKEN_AVG,
-	"MIN":       TOKEN_MIN,
-	"MAX":       TOKEN_MAX,
-	"INT64":     TOKEN_TYPE_INT64,
-	"FLOAT64":   TOKEN_TYPE_FLOAT64,
-	"STRING":    TOKEN_TYPE_STRING,
-	"BOOL":      TOKEN_TYPE_BOOL,
-	"TIMESTAMP": TOKEN_TYPE_TIMESTAMP,
+	"SELECT":  TOKEN_SELECT,
+	"FROM":    TOKEN_FROM,
+	"INSERT":  TOKEN_INSERT,
+	"INTO":    TOKEN_INTO,
+	"VALUES":  TOKEN_VALUES,
+	"CREATE":  TOKEN_CREATE,
+	"TABLE":   TOKEN_TABLE,
+	"DROP":    TOKEN_DROP,
+	"NULL":    TOKEN_NULL,
+	"TRUE":    TOKEN_TRUE,
+	"FALSE":   TOKEN_FALSE,
+	"INT64":   TOKEN_TYPE_INT64,
+	"FLOAT64": TOKEN_TYPE_FLOAT64,
+	"STRING":  TOKEN_TYPE_STRING,
+	"BOOL":    TOKEN_TYPE_BOOL,
 }
 
 // LookupIdent checks if an identifier is a keyword.
@@ -177,63 +130,9 @@ func (l *Lexer) NextToken() Token {
 	tok := Token{Line: l.line, Column: l.column}
 
 	switch l.ch {
-	case '=':
-		tok.Type = TOKEN_EQ
-		tok.Literal = string(l.ch)
-	case '+':
-		tok.Type = TOKEN_PLUS
-		tok.Literal = string(l.ch)
-	case '-':
-		if isDigit(l.peekChar()) {
-			l.readChar()
-			literal, isFloat := l.readNumber()
-			tok.Literal = "-" + literal
-			if isFloat {
-				tok.Type = TOKEN_FLOAT
-			} else {
-				tok.Type = TOKEN_INT
-			}
-			return tok
-		}
-		tok.Type = TOKEN_MINUS
-		tok.Literal = string(l.ch)
 	case '*':
 		tok.Type = TOKEN_ASTERISK
 		tok.Literal = string(l.ch)
-	case '/':
-		tok.Type = TOKEN_SLASH
-		tok.Literal = string(l.ch)
-	case '<':
-		if l.peekChar() == '=' {
-			l.readChar()
-			tok.Type = TOKEN_LTE
-			tok.Literal = "<="
-		} else if l.peekChar() == '>' {
-			l.readChar()
-			tok.Type = TOKEN_NEQ
-			tok.Literal = "<>"
-		} else {
-			tok.Type = TOKEN_LT
-			tok.Literal = string(l.ch)
-		}
-	case '>':
-		if l.peekChar() == '=' {
-			l.readChar()
-			tok.Type = TOKEN_GTE
-			tok.Literal = ">="
-		} else {
-			tok.Type = TOKEN_GT
-			tok.Literal = string(l.ch)
-		}
-	case '!':
-		if l.peekChar() == '=' {
-			l.readChar()
-			tok.Type = TOKEN_NEQ
-			tok.Literal = "!="
-		} else {
-			tok.Type = TOKEN_ILLEGAL
-			tok.Literal = string(l.ch)
-		}
 	case ',':
 		tok.Type = TOKEN_COMMA
 		tok.Literal = string(l.ch)
@@ -249,9 +148,20 @@ func (l *Lexer) NextToken() Token {
 	case '\'':
 		tok.Type = TOKEN_STRING
 		tok.Literal = l.readString()
-	case '"':
-		tok.Type = TOKEN_IDENT
-		tok.Literal = l.readQuotedIdentifier()
+	case '-':
+		if isDigit(l.peekChar()) {
+			l.readChar()
+			literal, isFloat := l.readNumber()
+			tok.Literal = "-" + literal
+			if isFloat {
+				tok.Type = TOKEN_FLOAT
+			} else {
+				tok.Type = TOKEN_INT
+			}
+			return tok
+		}
+		tok.Type = TOKEN_ILLEGAL
+		tok.Literal = string(l.ch)
 	case 0:
 		tok.Type = TOKEN_EOF
 		tok.Literal = ""
@@ -284,6 +194,7 @@ func (l *Lexer) skipWhitespace() {
 		l.readChar()
 	}
 
+	// Skip SQL comments
 	if l.ch == '-' && l.peekChar() == '-' {
 		for l.ch != '\n' && l.ch != 0 {
 			l.readChar()
@@ -316,17 +227,6 @@ func (l *Lexer) readNumber() (string, bool) {
 		}
 	}
 
-	if l.ch == 'e' || l.ch == 'E' {
-		isFloat = true
-		l.readChar()
-		if l.ch == '+' || l.ch == '-' {
-			l.readChar()
-		}
-		for isDigit(l.ch) {
-			l.readChar()
-		}
-	}
-
 	return l.input[position:l.position], isFloat
 }
 
@@ -352,17 +252,6 @@ func (l *Lexer) readString() string {
 	str := l.input[position:l.position]
 	str = strings.ReplaceAll(str, "''", "'")
 	return str
-}
-
-func (l *Lexer) readQuotedIdentifier() string {
-	l.readChar() // skip opening quote
-	position := l.position
-
-	for l.ch != '"' && l.ch != 0 {
-		l.readChar()
-	}
-
-	return l.input[position:l.position]
 }
 
 func isLetter(ch byte) bool {

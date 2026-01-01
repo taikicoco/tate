@@ -76,11 +76,6 @@ func (p *Parser) parseSelectStatement() *SelectStatement {
 
 	p.nextToken() // move past SELECT
 
-	if p.curTokenIs(TOKEN_DISTINCT) {
-		stmt.Distinct = true
-		p.nextToken()
-	}
-
 	stmt.Columns = p.parseSelectColumns()
 
 	if !p.expectPeek(TOKEN_FROM) {
@@ -94,38 +89,6 @@ func (p *Parser) parseSelectStatement() *SelectStatement {
 	}
 	stmt.TableName = p.curToken.Literal
 
-	if p.peekTokenIs(TOKEN_WHERE) {
-		p.nextToken()
-		p.nextToken()
-		stmt.Where = p.parseExpression(LOWEST)
-	}
-
-	if p.peekTokenIs(TOKEN_ORDER) {
-		p.nextToken()
-		if !p.expectPeek(TOKEN_BY) {
-			return nil
-		}
-		stmt.OrderBy = p.parseOrderByClause()
-	}
-
-	if p.peekTokenIs(TOKEN_LIMIT) {
-		p.nextToken()
-		p.nextToken()
-		if p.curTokenIs(TOKEN_INT) {
-			limit, _ := strconv.ParseInt(p.curToken.Literal, 10, 64)
-			stmt.Limit = &limit
-		}
-	}
-
-	if p.peekTokenIs(TOKEN_OFFSET) {
-		p.nextToken()
-		p.nextToken()
-		if p.curTokenIs(TOKEN_INT) {
-			offset, _ := strconv.ParseInt(p.curToken.Literal, 10, 64)
-			stmt.Offset = &offset
-		}
-	}
-
 	return stmt
 }
 
@@ -135,19 +98,12 @@ func (p *Parser) parseSelectColumns() []SelectColumn {
 	for {
 		if p.curTokenIs(TOKEN_ASTERISK) {
 			columns = append(columns, SelectColumn{IsWildcard: true})
+		} else if p.curTokenIs(TOKEN_IDENT) {
+			columns = append(columns, SelectColumn{
+				Expression: &Identifier{Name: p.curToken.Literal},
+			})
 		} else {
-			col := SelectColumn{
-				Expression: p.parseExpression(LOWEST),
-			}
-			if p.peekTokenIs(TOKEN_AS) {
-				p.nextToken()
-				p.nextToken()
-				col.Alias = p.curToken.Literal
-			} else if p.peekTokenIs(TOKEN_IDENT) {
-				p.nextToken()
-				col.Alias = p.curToken.Literal
-			}
-			columns = append(columns, col)
+			break
 		}
 
 		if !p.peekTokenIs(TOKEN_COMMA) {
@@ -158,38 +114,6 @@ func (p *Parser) parseSelectColumns() []SelectColumn {
 	}
 
 	return columns
-}
-
-func (p *Parser) parseOrderByClause() []OrderByClause {
-	var clauses []OrderByClause
-
-	p.nextToken()
-
-	for {
-		clause := OrderByClause{}
-
-		if !p.curTokenIs(TOKEN_IDENT) {
-			break
-		}
-		clause.Column = p.curToken.Literal
-
-		if p.peekTokenIs(TOKEN_DESC) {
-			clause.Desc = true
-			p.nextToken()
-		} else if p.peekTokenIs(TOKEN_ASC) {
-			p.nextToken()
-		}
-
-		clauses = append(clauses, clause)
-
-		if !p.peekTokenIs(TOKEN_COMMA) {
-			break
-		}
-		p.nextToken()
-		p.nextToken()
-	}
-
-	return clauses
 }
 
 func (p *Parser) parseInsertStatement() *InsertStatement {
@@ -223,7 +147,7 @@ func (p *Parser) parseInsertStatement() *InsertStatement {
 	}
 
 	p.nextToken()
-	stmt.Values = p.parseExpressionList()
+	stmt.Values = p.parseValueList()
 
 	if !p.expectPeek(TOKEN_RPAREN) {
 		return nil
@@ -292,14 +216,6 @@ func (p *Parser) parseColumnDefinitions() []ColumnDefinition {
 		p.nextToken()
 		def.DataType = p.parseDataType()
 
-		if p.peekTokenIs(TOKEN_NOT) {
-			p.nextToken()
-			if p.peekTokenIs(TOKEN_NULL) {
-				p.nextToken()
-				def.Nullable = false
-			}
-		}
-
 		defs = append(defs, def)
 
 		if p.peekTokenIs(TOKEN_COMMA) {
@@ -323,8 +239,6 @@ func (p *Parser) parseDataType() string {
 		return "STRING"
 	case TOKEN_TYPE_BOOL:
 		return "BOOL"
-	case TOKEN_TYPE_TIMESTAMP:
-		return "TIMESTAMP"
 	default:
 		return strings.ToUpper(p.curToken.Literal)
 	}
@@ -351,11 +265,11 @@ func (p *Parser) parseIdentifierList() []string {
 	return idents
 }
 
-func (p *Parser) parseExpressionList() []Expression {
+func (p *Parser) parseValueList() []Expression {
 	var exprs []Expression
 
 	for !p.curTokenIs(TOKEN_RPAREN) && !p.curTokenIs(TOKEN_EOF) {
-		exprs = append(exprs, p.parseExpression(LOWEST))
+		exprs = append(exprs, p.parseLiteral())
 
 		if p.peekTokenIs(TOKEN_COMMA) {
 			p.nextToken()
@@ -368,69 +282,7 @@ func (p *Parser) parseExpressionList() []Expression {
 	return exprs
 }
 
-// Operator precedence levels
-const (
-	LOWEST = iota
-	OR_PREC
-	AND_PREC
-	NOT_PREC
-	EQUALS
-	LESSGREATER
-	SUM
-	PRODUCT
-	PREFIX
-	CALL
-)
-
-var precedences = map[TokenType]int{
-	TOKEN_OR:       OR_PREC,
-	TOKEN_AND:      AND_PREC,
-	TOKEN_EQ:       EQUALS,
-	TOKEN_NEQ:      EQUALS,
-	TOKEN_LT:       LESSGREATER,
-	TOKEN_GT:       LESSGREATER,
-	TOKEN_LTE:      LESSGREATER,
-	TOKEN_GTE:      LESSGREATER,
-	TOKEN_PLUS:     SUM,
-	TOKEN_MINUS:    SUM,
-	TOKEN_ASTERISK: PRODUCT,
-	TOKEN_SLASH:    PRODUCT,
-	TOKEN_LPAREN:   CALL,
-}
-
-func (p *Parser) peekPrecedence() int {
-	if prec, ok := precedences[p.peekToken.Type]; ok {
-		return prec
-	}
-	return LOWEST
-}
-
-func (p *Parser) curPrecedence() int {
-	if prec, ok := precedences[p.curToken.Type]; ok {
-		return prec
-	}
-	return LOWEST
-}
-
-func (p *Parser) parseExpression(precedence int) Expression {
-	left := p.parsePrefixExpression()
-	if left == nil {
-		return nil
-	}
-
-	for !p.peekTokenIs(TOKEN_SEMICOLON) && precedence < p.peekPrecedence() {
-		if !p.isInfixOperator(p.peekToken.Type) {
-			return left
-		}
-
-		p.nextToken()
-		left = p.parseInfixExpression(left)
-	}
-
-	return left
-}
-
-func (p *Parser) parsePrefixExpression() Expression {
+func (p *Parser) parseLiteral() Expression {
 	switch p.curToken.Type {
 	case TOKEN_INT:
 		val, err := strconv.ParseInt(p.curToken.Literal, 10, 64)
@@ -460,96 +312,8 @@ func (p *Parser) parsePrefixExpression() Expression {
 	case TOKEN_NULL:
 		return &NullLiteral{}
 
-	case TOKEN_NOT:
-		p.nextToken()
-		return &UnaryExpression{
-			Operator: "NOT",
-			Operand:  p.parseExpression(NOT_PREC),
-		}
-
-	case TOKEN_MINUS:
-		p.nextToken()
-		return &UnaryExpression{
-			Operator: "-",
-			Operand:  p.parseExpression(PREFIX),
-		}
-
-	case TOKEN_LPAREN:
-		p.nextToken()
-		expr := p.parseExpression(LOWEST)
-		if !p.expectPeek(TOKEN_RPAREN) {
-			return nil
-		}
-		return expr
-
-	case TOKEN_COUNT, TOKEN_SUM, TOKEN_AVG, TOKEN_MIN, TOKEN_MAX:
-		return p.parseFunctionCall()
-
-	case TOKEN_IDENT:
-		return &Identifier{Name: p.curToken.Literal}
-
 	default:
-		p.addError(fmt.Sprintf("no prefix parse function for %v", p.curToken.Type))
+		p.addError(fmt.Sprintf("unexpected token in value: %s", p.curToken.Literal))
 		return nil
 	}
-}
-
-func (p *Parser) parseInfixExpression(left Expression) Expression {
-	operator := p.curToken.Literal
-	switch p.curToken.Type {
-	case TOKEN_AND:
-		operator = "AND"
-	case TOKEN_OR:
-		operator = "OR"
-	}
-
-	precedence := p.curPrecedence()
-	p.nextToken()
-	right := p.parseExpression(precedence)
-
-	return &BinaryExpression{
-		Left:     left,
-		Operator: operator,
-		Right:    right,
-	}
-}
-
-func (p *Parser) parseFunctionCall() *FunctionCall {
-	fn := &FunctionCall{Name: strings.ToUpper(p.curToken.Literal)}
-
-	if !p.expectPeek(TOKEN_LPAREN) {
-		return nil
-	}
-
-	p.nextToken()
-
-	if p.curTokenIs(TOKEN_DISTINCT) {
-		fn.Distinct = true
-		p.nextToken()
-	}
-
-	if p.curTokenIs(TOKEN_ASTERISK) {
-		fn.Arguments = []Expression{&Identifier{Name: "*"}}
-	} else if !p.curTokenIs(TOKEN_RPAREN) {
-		fn.Arguments = p.parseExpressionList()
-	}
-
-	if !p.expectPeek(TOKEN_RPAREN) {
-		return nil
-	}
-
-	return fn
-}
-
-func (p *Parser) isInfixOperator(t TokenType) bool {
-	switch t {
-	case TOKEN_EQ, TOKEN_NEQ,
-		TOKEN_LT, TOKEN_GT,
-		TOKEN_LTE, TOKEN_GTE,
-		TOKEN_AND, TOKEN_OR,
-		TOKEN_PLUS, TOKEN_MINUS,
-		TOKEN_ASTERISK, TOKEN_SLASH:
-		return true
-	}
-	return false
 }

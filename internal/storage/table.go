@@ -95,7 +95,7 @@ func (cf *ColumnFile) appendZeroValue() {
 	switch cf.dataType {
 	case TypeBool:
 		cf.data = append(cf.data, 0)
-	case TypeInt64, TypeFloat64, TypeTimestamp:
+	case TypeInt64, TypeFloat64:
 		cf.data = append(cf.data, make([]byte, 8)...)
 	case TypeString:
 		cf.data = append(cf.data, 0, 0, 0, 0)

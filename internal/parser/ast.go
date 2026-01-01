@@ -29,7 +29,7 @@ func (s *CreateTableStatement) statementNode() {}
 // ColumnDefinition represents a column definition in CREATE TABLE.
 type ColumnDefinition struct {
 	Name     string
-	DataType string // "INT64", "STRING", etc.
+	DataType string
 	Nullable bool
 }
 
@@ -54,13 +54,8 @@ func (s *InsertStatement) statementNode() {}
 
 // SelectStatement represents a SELECT statement.
 type SelectStatement struct {
-	Distinct  bool
 	Columns   []SelectColumn
 	TableName string
-	Where     Expression
-	OrderBy   []OrderByClause
-	Limit     *int64
-	Offset    *int64
 }
 
 func (s *SelectStatement) node()          {}
@@ -69,14 +64,7 @@ func (s *SelectStatement) statementNode() {}
 // SelectColumn represents a column in SELECT clause.
 type SelectColumn struct {
 	Expression Expression
-	Alias      string
 	IsWildcard bool
-}
-
-// OrderByClause represents an ORDER BY clause element.
-type OrderByClause struct {
-	Column string
-	Desc   bool
 }
 
 // Identifier represents an identifier (column or table name).
@@ -124,32 +112,3 @@ type NullLiteral struct{}
 
 func (e *NullLiteral) node()           {}
 func (e *NullLiteral) expressionNode() {}
-
-// BinaryExpression represents a binary operation.
-type BinaryExpression struct {
-	Left     Expression
-	Operator string
-	Right    Expression
-}
-
-func (e *BinaryExpression) node()           {}
-func (e *BinaryExpression) expressionNode() {}
-
-// UnaryExpression represents a unary operation.
-type UnaryExpression struct {
-	Operator string
-	Operand  Expression
-}
-
-func (e *UnaryExpression) node()           {}
-func (e *UnaryExpression) expressionNode() {}
-
-// FunctionCall represents a function call (e.g., COUNT, SUM).
-type FunctionCall struct {
-	Name      string
-	Arguments []Expression
-	Distinct  bool
-}
-
-func (e *FunctionCall) node()           {}
-func (e *FunctionCall) expressionNode() {}

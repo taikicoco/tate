@@ -51,12 +51,11 @@ SQL文字列を抽象構文木（AST）に変換する。
 - **Parser**: トークン列をASTに変換（Pratt Parser）
 
 ```
-"SELECT * FROM users WHERE age > 20"
-                ↓
+"SELECT * FROM users"
+          ↓
 SelectStatement {
     Columns: [Wildcard]
     TableName: "users"
-    Where: BinaryExpr{age > 20}
 }
 ```
 
@@ -66,7 +65,7 @@ ASTを解釈してStorageに対する操作を実行する。
 
 - CREATE TABLE / DROP TABLE
 - INSERT INTO
-- SELECT（WHERE, ORDER BY, LIMIT, 集計関数）
+- SELECT（全件取得、カラム指定）
 
 ### Storage（ストレージ）
 

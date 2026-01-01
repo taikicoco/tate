@@ -3,7 +3,6 @@ package executor
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/taikicoco/tate/internal/parser"
@@ -186,7 +185,7 @@ func (e *Executor) executeInsert(stmt *parser.InsertStatement) (*Result, error) 
 			if idx == -1 {
 				return nil, fmt.Errorf("column %q not found", colName)
 			}
-			val, err := e.evaluateExpression(stmt.Values[i], nil, nil)
+			val, err := e.evaluateLiteral(stmt.Values[i])
 			if err != nil {
 				return nil, err
 			}
@@ -200,7 +199,7 @@ func (e *Executor) executeInsert(stmt *parser.InsertStatement) (*Result, error) 
 
 		values = make([]storage.Value, len(stmt.Values))
 		for i, expr := range stmt.Values {
-			val, err := e.evaluateExpression(expr, nil, nil)
+			val, err := e.evaluateLiteral(expr)
 			if err != nil {
 				return nil, err
 			}
@@ -229,440 +228,53 @@ func (e *Executor) executeSelect(stmt *parser.SelectStatement) (*Result, error) 
 	result := NewResult()
 
 	var selectColumns []string
-	var selectExpressions []parser.Expression
-	hasAggregates := false
+	var columnIndices []int
 
 	for _, col := range stmt.Columns {
 		if col.IsWildcard {
 			selectColumns = append(selectColumns, schema.ColumnNames()...)
-			for _, name := range schema.ColumnNames() {
-				selectExpressions = append(selectExpressions, &parser.Identifier{Name: name})
+			for i := range schema.Columns {
+				columnIndices = append(columnIndices, i)
 			}
-		} else {
-			if fn, ok := col.Expression.(*parser.FunctionCall); ok {
-				hasAggregates = true
-				name := fn.Name
-				if len(fn.Arguments) > 0 {
-					if ident, ok := fn.Arguments[0].(*parser.Identifier); ok {
-						name = fmt.Sprintf("%s(%s)", fn.Name, ident.Name)
-					}
-				}
-				if col.Alias != "" {
-					name = col.Alias
-				}
-				selectColumns = append(selectColumns, name)
-			} else if ident, ok := col.Expression.(*parser.Identifier); ok {
-				name := ident.Name
-				if col.Alias != "" {
-					name = col.Alias
-				}
-				selectColumns = append(selectColumns, name)
-			} else {
-				selectColumns = append(selectColumns, "?")
+		} else if ident, ok := col.Expression.(*parser.Identifier); ok {
+			idx := schema.GetColumnIndex(ident.Name)
+			if idx == -1 {
+				return nil, fmt.Errorf("column %q not found", ident.Name)
 			}
-			selectExpressions = append(selectExpressions, col.Expression)
+			selectColumns = append(selectColumns, ident.Name)
+			columnIndices = append(columnIndices, idx)
 		}
 	}
 
 	result.Columns = selectColumns
 
-	if hasAggregates {
-		return e.executeAggregateSelect(stmt, table, selectExpressions, result)
-	}
-
-	var filteredRows [][]storage.Value
-
 	_ = table.Scan(func(rowIndex uint64, row []storage.Value) bool {
-		if stmt.Where != nil {
-			match, err := e.evaluateCondition(stmt.Where, schema.ColumnNames(), row)
-			if err != nil || !match {
-				return true
-			}
+		resultRow := make([]storage.Value, len(columnIndices))
+		for i, idx := range columnIndices {
+			resultRow[i] = row[idx]
 		}
-
-		resultRow := make([]storage.Value, len(selectExpressions))
-		for i, expr := range selectExpressions {
-			val, _ := e.evaluateExpression(expr, schema.ColumnNames(), row)
-			resultRow[i] = val
-		}
-
-		filteredRows = append(filteredRows, resultRow)
+		result.Rows = append(result.Rows, resultRow)
 		return true
 	})
-
-	result.Rows = filteredRows
-
-	if stmt.Distinct {
-		result.Rows = e.applyDistinct(result.Rows)
-	}
-
-	if len(stmt.OrderBy) > 0 {
-		e.applyOrderBy(result, stmt.OrderBy)
-	}
-
-	if stmt.Offset != nil && *stmt.Offset > 0 {
-		offset := int(*stmt.Offset)
-		if offset < len(result.Rows) {
-			result.Rows = result.Rows[offset:]
-		} else {
-			result.Rows = nil
-		}
-	}
-
-	if stmt.Limit != nil {
-		limit := int(*stmt.Limit)
-		if limit < len(result.Rows) {
-			result.Rows = result.Rows[:limit]
-		}
-	}
 
 	return result, nil
 }
 
-func (e *Executor) executeAggregateSelect(stmt *parser.SelectStatement, table *storage.Table,
-	selectExpressions []parser.Expression, result *Result) (*Result, error) {
-
-	schema := table.Schema
-
-	type aggregateState struct {
-		count  int64
-		sum    float64
-		min    storage.Value
-		max    storage.Value
-		hasMin bool
-		hasMax bool
-	}
-
-	aggregates := make(map[int]*aggregateState)
-
-	for i, expr := range selectExpressions {
-		if _, ok := expr.(*parser.FunctionCall); ok {
-			aggregates[i] = &aggregateState{}
-		}
-	}
-
-	_ = table.Scan(func(rowIndex uint64, row []storage.Value) bool {
-		if stmt.Where != nil {
-			match, err := e.evaluateCondition(stmt.Where, schema.ColumnNames(), row)
-			if err != nil || !match {
-				return true
-			}
-		}
-
-		for i, expr := range selectExpressions {
-			fn, ok := expr.(*parser.FunctionCall)
-			if !ok {
-				continue
-			}
-
-			state := aggregates[i]
-
-			switch fn.Name {
-			case "COUNT":
-				state.count++
-
-			case "SUM", "AVG":
-				if len(fn.Arguments) > 0 {
-					val, _ := e.evaluateExpression(fn.Arguments[0], schema.ColumnNames(), row)
-					if num, ok := val.ToNumeric(); ok {
-						state.sum += num
-						state.count++
-					}
-				}
-
-			case "MIN":
-				if len(fn.Arguments) > 0 {
-					val, _ := e.evaluateExpression(fn.Arguments[0], schema.ColumnNames(), row)
-					if !val.IsNull {
-						if !state.hasMin || val.Compare(state.min) < 0 {
-							state.min = val
-							state.hasMin = true
-						}
-					}
-				}
-
-			case "MAX":
-				if len(fn.Arguments) > 0 {
-					val, _ := e.evaluateExpression(fn.Arguments[0], schema.ColumnNames(), row)
-					if !val.IsNull {
-						if !state.hasMax || val.Compare(state.max) > 0 {
-							state.max = val
-							state.hasMax = true
-						}
-					}
-				}
-			}
-		}
-
-		return true
-	})
-
-	resultRow := make([]storage.Value, len(selectExpressions))
-
-	for i, expr := range selectExpressions {
-		fn, ok := expr.(*parser.FunctionCall)
-		if !ok {
-			resultRow[i] = storage.NewNullValue()
-			continue
-		}
-
-		state := aggregates[i]
-
-		switch fn.Name {
-		case "COUNT":
-			resultRow[i] = storage.NewInt64Value(state.count)
-
-		case "SUM":
-			if state.count == 0 {
-				resultRow[i] = storage.NewNullValue()
-			} else {
-				resultRow[i] = storage.NewFloat64Value(state.sum)
-			}
-
-		case "AVG":
-			if state.count == 0 {
-				resultRow[i] = storage.NewNullValue()
-			} else {
-				resultRow[i] = storage.NewFloat64Value(state.sum / float64(state.count))
-			}
-
-		case "MIN":
-			if state.hasMin {
-				resultRow[i] = state.min
-			} else {
-				resultRow[i] = storage.NewNullValue()
-			}
-
-		case "MAX":
-			if state.hasMax {
-				resultRow[i] = state.max
-			} else {
-				resultRow[i] = storage.NewNullValue()
-			}
-		}
-	}
-
-	result.Rows = [][]storage.Value{resultRow}
-	return result, nil
-}
-
-func (e *Executor) evaluateExpression(expr parser.Expression, columns []string, row []storage.Value) (storage.Value, error) {
+func (e *Executor) evaluateLiteral(expr parser.Expression) (storage.Value, error) {
 	switch ex := expr.(type) {
-	case *parser.Identifier:
-		if columns != nil && row != nil {
-			for i, col := range columns {
-				if col == ex.Name {
-					return row[i], nil
-				}
-			}
-		}
-		return storage.NewNullValue(), nil
-
 	case *parser.IntegerLiteral:
 		return storage.NewInt64Value(ex.Value), nil
-
 	case *parser.FloatLiteral:
 		return storage.NewFloat64Value(ex.Value), nil
-
 	case *parser.StringLiteral:
 		return storage.NewStringValue(ex.Value), nil
-
 	case *parser.BoolLiteral:
 		return storage.NewBoolValue(ex.Value), nil
-
 	case *parser.NullLiteral:
 		return storage.NewNullValue(), nil
-
-	case *parser.BinaryExpression:
-		left, err := e.evaluateExpression(ex.Left, columns, row)
-		if err != nil {
-			return storage.NewNullValue(), err
-		}
-		right, err := e.evaluateExpression(ex.Right, columns, row)
-		if err != nil {
-			return storage.NewNullValue(), err
-		}
-
-		switch ex.Operator {
-		case "+":
-			if lv, ok := left.ToNumeric(); ok {
-				if rv, ok := right.ToNumeric(); ok {
-					return storage.NewFloat64Value(lv + rv), nil
-				}
-			}
-		case "-":
-			if lv, ok := left.ToNumeric(); ok {
-				if rv, ok := right.ToNumeric(); ok {
-					return storage.NewFloat64Value(lv - rv), nil
-				}
-			}
-		case "*":
-			if lv, ok := left.ToNumeric(); ok {
-				if rv, ok := right.ToNumeric(); ok {
-					return storage.NewFloat64Value(lv * rv), nil
-				}
-			}
-		case "/":
-			if lv, ok := left.ToNumeric(); ok {
-				if rv, ok := right.ToNumeric(); ok && rv != 0 {
-					return storage.NewFloat64Value(lv / rv), nil
-				}
-			}
-		}
-
-		return storage.NewNullValue(), nil
-
-	case *parser.UnaryExpression:
-		val, err := e.evaluateExpression(ex.Operand, columns, row)
-		if err != nil {
-			return storage.NewNullValue(), err
-		}
-
-		switch ex.Operator {
-		case "-":
-			if v, ok := val.AsInt64(); ok {
-				return storage.NewInt64Value(-v), nil
-			}
-			if v, ok := val.AsFloat64(); ok {
-				return storage.NewFloat64Value(-v), nil
-			}
-		case "NOT":
-			if v, ok := val.AsBool(); ok {
-				return storage.NewBoolValue(!v), nil
-			}
-		}
-
-		return storage.NewNullValue(), nil
-
 	default:
 		return storage.NewNullValue(), fmt.Errorf("unsupported expression type: %T", expr)
 	}
-}
-
-func (e *Executor) evaluateCondition(expr parser.Expression, columns []string, row []storage.Value) (bool, error) {
-	switch ex := expr.(type) {
-	case *parser.BinaryExpression:
-		switch strings.ToUpper(ex.Operator) {
-		case "AND":
-			left, err := e.evaluateCondition(ex.Left, columns, row)
-			if err != nil {
-				return false, err
-			}
-			if !left {
-				return false, nil
-			}
-			return e.evaluateCondition(ex.Right, columns, row)
-
-		case "OR":
-			left, err := e.evaluateCondition(ex.Left, columns, row)
-			if err != nil {
-				return false, err
-			}
-			if left {
-				return true, nil
-			}
-			return e.evaluateCondition(ex.Right, columns, row)
-
-		default:
-			left, err := e.evaluateExpression(ex.Left, columns, row)
-			if err != nil {
-				return false, err
-			}
-			right, err := e.evaluateExpression(ex.Right, columns, row)
-			if err != nil {
-				return false, err
-			}
-
-			return e.compareValues(left, right, ex.Operator), nil
-		}
-
-	case *parser.UnaryExpression:
-		if ex.Operator == "NOT" {
-			result, err := e.evaluateCondition(ex.Operand, columns, row)
-			if err != nil {
-				return false, err
-			}
-			return !result, nil
-		}
-
-	case *parser.BoolLiteral:
-		return ex.Value, nil
-	}
-
-	return false, nil
-}
-
-func (e *Executor) compareValues(left, right storage.Value, op string) bool {
-	if left.IsNull || right.IsNull {
-		return false
-	}
-
-	cmp := left.Compare(right)
-
-	switch op {
-	case "=":
-		return cmp == 0
-	case "<>", "!=":
-		return cmp != 0
-	case "<":
-		return cmp < 0
-	case ">":
-		return cmp > 0
-	case "<=":
-		return cmp <= 0
-	case ">=":
-		return cmp >= 0
-	}
-
-	return false
-}
-
-func (e *Executor) applyDistinct(rows [][]storage.Value) [][]storage.Value {
-	seen := make(map[string]bool)
-	var result [][]storage.Value
-
-	for _, row := range rows {
-		key := e.rowKey(row)
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, row)
-		}
-	}
-
-	return result
-}
-
-func (e *Executor) rowKey(row []storage.Value) string {
-	var parts []string
-	for _, val := range row {
-		parts = append(parts, val.String())
-	}
-	return strings.Join(parts, "\x00")
-}
-
-func (e *Executor) applyOrderBy(result *Result, orderBy []parser.OrderByClause) {
-	colIndices := make(map[string]int)
-	for i, col := range result.Columns {
-		colIndices[col] = i
-	}
-
-	sort.SliceStable(result.Rows, func(i, j int) bool {
-		for _, ob := range orderBy {
-			idx, ok := colIndices[ob.Column]
-			if !ok {
-				continue
-			}
-
-			cmp := result.Rows[i][idx].Compare(result.Rows[j][idx])
-			if cmp != 0 {
-				if ob.Desc {
-					return cmp > 0
-				}
-				return cmp < 0
-			}
-		}
-		return false
-	})
 }
 
 func (e *Executor) getTable(name string) (*storage.Table, error) {
